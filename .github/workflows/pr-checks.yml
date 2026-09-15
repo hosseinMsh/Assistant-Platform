@@ -1,0 +1,37 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-python:
+    name: Python — Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check syntax (py_compile)
+        run: |
+          find . -name "*.py" \
+            ! -path "*/node_modules/*" \
+            ! -path "*/.git/*" \
+            ! -path "*/__pycache__/*" \
+            -exec python3 -m py_compile {} \;
+          echo "All Python files OK"
+
+  check-secrets:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for accidental secrets
+        run: |
+          # Fail if any .env file (not .env.example) is committed
+          if git ls-files | grep -E '\.env$' | grep -v '\.env\.example'; then
+            echo "ERROR: .env file detected in repo!"
+            exit 1
+          fi
+          echo "No .env files committed — OK"

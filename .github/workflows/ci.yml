@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ── MCP Notify Tests ────────────────────────────────────────────────────────
+  test-mcp-notify:
+    name: MCP Notify — Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcps/notify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            mcps/shared-requirements.txt
+            mcps/notify/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r ../shared-requirements.txt
+          pip install pytest anyio httpx
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  # ── MCP Gateway Tests ───────────────────────────────────────────────────────
+  test-mcp-gateway:
+    name: MCP Gateway — Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcps/gateway
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            mcps/shared-requirements.txt
+            mcps/gateway/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r ../shared-requirements.txt
+          pip install pyyaml pytest anyio httpx
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  # ── UI Backend Tests ─────────────────────────────────────────────────────────
+  test-ui-backend:
+    name: UI Backend — Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ui-backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest anyio
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  # ── UI Build & Tests ─────────────────────────────────────────────────────────
+  test-ui:
+    name: UI — Build & Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+
+      - name: Run tests
+        run: npm test -- --passWithNoTests
+
+  # ── Docker Build Check ───────────────────────────────────────────────────────
+  docker-build:
+    name: Docker — Build Check
+    runs-on: ubuntu-latest
+    needs: [test-mcp-notify, test-mcp-gateway, test-ui-backend, test-ui]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build mcp-notify
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: mcps/notify/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build mcp-gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: mcps/gateway/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build ui-backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ui-backend
+          file: ui-backend/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build ui
+        uses: docker/build-push-action@v5
+        with:
+          context: ui
+          file: ui/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
