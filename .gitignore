@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+venv/
+.venv/
+
+# Node / Next.js
+node_modules/
+.next/
+.env.local
+.env.production
+npm-debug.log*
+
+# Docker
+*.tar.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Secrets — never commit real .env files
+# (only .env.example files are committed)

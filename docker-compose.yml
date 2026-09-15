@@ -1,0 +1,182 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reusable fragments
+# ──────────────────────────────────────────────────────────────────────────────
+
+x-mcp-service: &mcp-defaults
+  restart: unless-stopped
+  networks:
+    - internal
+  # Build context is always the repo root so Dockerfiles can share mcps/shared-requirements.txt
+  # Each MCP Dockerfile lives in mcps/<name>/Dockerfile
+
+x-mcp-healthcheck: &mcp-healthcheck
+  healthcheck:
+    test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+    interval: 15s
+    timeout: 5s
+    start_period: 10s
+    retries: 3
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Services
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-assistant}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-assistant}"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    <<: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - internal
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
+    <<: *logging
+
+  # ── MCP Servers ─────────────────────────────────────────────────────────────
+  # To add a new MCP server:
+  #   1. Create mcps/<name>/ with app/, Dockerfile, requirements.txt, .env.example
+  #   2. Add the service block below (copy mcp-notify pattern)
+  #   3. Add it to mcp-gateway depends_on
+  #   4. Add it to mcps/gateway/config/servers.yml
+  # No other changes needed.
+
+  mcp-notify:
+    <<: [*mcp-defaults, *mcp-healthcheck, *logging]
+    build:
+      context: .                          # repo root — shares mcps/shared-requirements.txt
+      dockerfile: mcps/notify/Dockerfile
+    env_file: mcps/notify/.env
+    expose:
+      - "8080"
+
+  # ── MCP Gateway ─────────────────────────────────────────────────────────────
+
+  mcp-gateway:
+    <<: [*mcp-defaults, *mcp-healthcheck, *logging]
+    build:
+      context: .
+      dockerfile: mcps/gateway/Dockerfile
+    env_file: mcps/gateway/.env
+    expose:
+      - "8080"
+    # servers.yml mounted so you can add new servers without rebuilding the image
+    volumes:
+      - ./mcps/gateway/config:/app/config:ro
+    depends_on:
+      mcp-notify:
+        condition: service_healthy
+    # Add new MCPs here as they are added above:
+    # mcp-hr:
+    #   condition: service_healthy
+
+  # ── UI Backend ──────────────────────────────────────────────────────────────
+
+  ui-backend:
+    build:
+      context: ./ui-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - internal
+      - external
+    env_file: ui-backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-assistant}
+      REDIS_URL: redis://redis:6379/0
+      MCP_GATEWAY_URL: http://mcp-gateway:8080
+    ports:
+      - "${UI_BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    <<: *logging
+
+  # ── Web UI ──────────────────────────────────────────────────────────────────
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - external
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    depends_on:
+      ui-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    <<: *logging
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Networks
+# ──────────────────────────────────────────────────────────────────────────────
+
+networks:
+  internal:
+    # MCP servers, gateway, backend, postgres, redis — not exposed to host
+    internal: true
+  external:
+    # UI and ui-backend ports exposed to host
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Volumes
+# ──────────────────────────────────────────────────────────────────────────────
+
+volumes:
+  postgres_data:
+  redis_data:
