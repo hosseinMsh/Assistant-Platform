@@ -1,6 +1,0 @@
-# MCP Server Registry
-# Add new servers here without changing architecture.
-servers:
-  notify:
-    base_url: "http://mcp-notify:8080"
-    description: "Notify API adapter"

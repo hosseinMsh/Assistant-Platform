@@ -8,6 +8,7 @@ x-mcp-service: &mcp-defaults
   restart: unless-stopped
   networks:
     - internal
+    - external
   # Build context is always the repo root so Dockerfiles can share mcps/shared-requirements.txt
   # Each MCP Dockerfile lives in mcps/<name>/Dockerfile
 
@@ -89,13 +90,14 @@ services:
   # ── MCP Gateway ─────────────────────────────────────────────────────────────
 
   mcp-gateway:
-    <<: [*mcp-defaults, *mcp-healthcheck, *logging]
+    <<: [ *mcp-healthcheck, *logging]
     build:
       context: .
       dockerfile: mcps/gateway/Dockerfile
     env_file: mcps/gateway/.env
     expose:
       - "8080"
+    restart: unless-stopped
     # servers.yml mounted so you can add new servers without rebuilding the image
     volumes:
       - ./mcps/gateway/config:/app/config:ro
