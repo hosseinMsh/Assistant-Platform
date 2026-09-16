@@ -28,6 +28,8 @@ class BaseEvent(BaseModel):
         return v
 
 
+# ── Conversation / Message ─────────────────────────────────────────────────────
+
 class MessageCreatedEvent(BaseEvent):
     type: Literal["conversation.message.created"] = "conversation.message.created"
     conversation_id: str
@@ -35,6 +37,30 @@ class MessageCreatedEvent(BaseEvent):
     role: str
     content: str
 
+
+class AssistantResponseCreatedEvent(BaseEvent):
+    type: Literal["assistant.response.created"] = "assistant.response.created"
+    conversation_id: str
+    message_id: str
+    content: str
+
+
+# ── Processing Status (Real-time transparency) ─────────────────────────────────
+# These events show the user what is happening step by step while they wait.
+
+class ProcessingStatusEvent(BaseEvent):
+    """Sent at each stage of request processing so the UI can show live status."""
+    type: Literal["processing.status"] = "processing.status"
+    conversation_id: str
+    # stage: one of: thinking | fetching_tools | calling_llm | tool_selected | confirming | executing | done | error
+    stage: str
+    # Human-readable label shown in the UI (Persian)
+    label: str
+    # Optional detail, e.g. tool name selected
+    detail: str | None = None
+
+
+# ── Tool Execution ─────────────────────────────────────────────────────────────
 
 class ToolExecutionCreatedEvent(BaseEvent):
     type: Literal["tool_execution.created"] = "tool_execution.created"
@@ -54,13 +80,18 @@ class ToolExecutionUpdatedEvent(BaseEvent):
     duration_ms: float | None = None
 
 
+# ── Confirmation ───────────────────────────────────────────────────────────────
+
 class ConfirmationCreatedEvent(BaseEvent):
     type: Literal["confirmation.created"] = "confirmation.created"
     conversation_id: str
     execution_id: str
     confirmation_id: str
     tool: str
+    # Generic preview dict — supports any tool, not just notify
     preview: dict[str, Any]
+    # Human-readable title for what is being confirmed
+    action_title: str = "تأیید عملیات"
 
 
 class ConfirmationCompletedEvent(BaseEvent):
@@ -71,12 +102,7 @@ class ConfirmationCompletedEvent(BaseEvent):
     action: str  # confirmed | cancelled
 
 
-class AssistantResponseCreatedEvent(BaseEvent):
-    type: Literal["assistant.response.created"] = "assistant.response.created"
-    conversation_id: str
-    message_id: str
-    content: str
-
+# ── Connection ─────────────────────────────────────────────────────────────────
 
 class ErrorEvent(BaseEvent):
     type: Literal["error"] = "error"
@@ -94,11 +120,12 @@ class ConnectionStateEvent(BaseEvent):
 
 AnyEvent = (
     MessageCreatedEvent
+    | AssistantResponseCreatedEvent
+    | ProcessingStatusEvent
     | ToolExecutionCreatedEvent
     | ToolExecutionUpdatedEvent
     | ConfirmationCreatedEvent
     | ConfirmationCompletedEvent
-    | AssistantResponseCreatedEvent
     | ErrorEvent
     | ConnectionStateEvent
 )

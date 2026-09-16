@@ -6,16 +6,23 @@ import type {
   ToolResultResponse,
 } from "@/types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string
+  ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     credentials: "include",
@@ -26,8 +33,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     let message = "خطا در ارتباط با سرور";
     try {
       const body = await res.json();
-      message = body?.detail ?? body?.error?.message ?? body?.message ?? message;
-    } catch {}
+      message =
+        body?.detail ??
+        body?.error?.message ??
+        body?.message ??
+        message;
+    } catch {
+      // ignore parse error
+    }
     throw new ApiError(res.status, message);
   }
   return res.json() as Promise<T>;
@@ -41,7 +54,10 @@ function normalizeToken(raw: string): string {
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
-export async function createSession(rawToken: string): Promise<SessionResponse> {
+
+export async function createSession(
+  rawToken: string
+): Promise<SessionResponse> {
   return request<SessionResponse>("/api/v1/auth/session", {
     method: "POST",
     body: JSON.stringify({ access_token: normalizeToken(rawToken) }),
@@ -53,14 +69,20 @@ export async function logout(): Promise<void> {
 }
 
 // ── Chat ───────────────────────────────────────────────────────────────────────
-export async function sendMessage(message: string, conversationId: string | null): Promise<ChatResponse> {
+
+export async function sendMessage(
+  message: string,
+  conversationId: string | null
+): Promise<ChatResponse> {
   return request<ChatResponse>("/api/v1/chat", {
     method: "POST",
     body: JSON.stringify({ message, conversation_id: conversationId }),
   });
 }
 
-export async function confirmAction(confirmationId: string): Promise<ToolResultResponse> {
+export async function confirmAction(
+  confirmationId: string
+): Promise<ToolResultResponse> {
   return request<ToolResultResponse>("/api/v1/chat/confirm", {
     method: "POST",
     body: JSON.stringify({ confirmation_id: confirmationId }),
@@ -75,6 +97,7 @@ export async function cancelAction(confirmationId: string): Promise<void> {
 }
 
 // ── Conversations ──────────────────────────────────────────────────────────────
+
 export async function getConversations(): Promise<ConversationSummary[]> {
   return request<ConversationSummary[]>("/api/v1/conversations");
 }
@@ -84,6 +107,7 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
 }
 
 // ── WebSocket URL ──────────────────────────────────────────────────────────────
+
 export function getWsUrl(conversationId?: string): string {
   const base = BASE_URL.replace(/^http/, "ws");
   const qs = conversationId ? `?conversation_id=${conversationId}` : "";

@@ -10,25 +10,36 @@ export type ExecutionStatus =
   | "failed"
   | "cancelled";
 
+export type ProcessingStage =
+  | "thinking"
+  | "fetching_tools"
+  | "calling_llm"
+  | "tool_selected"
+  | "confirming"
+  | "executing"
+  | "done"
+  | "error";
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   createdAt?: string;
-  // If this message is linked to a tool execution
   executionId?: string;
   executionStatus?: ExecutionStatus;
 }
 
-// ── Notification Preview ───────────────────────────────────────────────────────
+// ── Generic Tool Preview ───────────────────────────────────────────────────────
+// Works for any current or future tool — not tied to notify schema.
+// The `arguments` field holds the raw tool arguments.
+// Top-level scalar fields are also flattened for easy UI access.
 
-export interface NotificationPreview {
-  userName: string;
-  providerType: number;
-  channel: string;
-  subject?: string;
-  message: string;
-  sendingDate?: string;
+export interface GenericToolPreview {
+  tool: string;
+  tool_label: string;
+  arguments: Record<string, unknown>;
+  // Flattened scalar fields (e.g. userName, message, providerType, etc.)
+  [key: string]: unknown;
 }
 
 // ── Confirmation ───────────────────────────────────────────────────────────────
@@ -37,7 +48,10 @@ export interface ConfirmationState {
   confirmationId: string;
   executionId: string;
   tool: string;
-  preview: NotificationPreview;
+  /** Human-readable Persian title for the dialog header */
+  actionTitle: string;
+  /** Generic preview — works for any tool */
+  preview: GenericToolPreview;
   conversationId: string;
 }
 
@@ -77,7 +91,8 @@ export interface ConfirmationRequiredResponse {
   confirmation_id: string;
   execution_id: string;
   tool: string;
-  preview: NotificationPreview;
+  action_title: string;
+  preview: GenericToolPreview;
 }
 
 export interface ToolResultResponse {
@@ -106,6 +121,17 @@ export interface WsEvent {
   [key: string]: unknown;
 }
 
+/** Real-time processing transparency event */
+export interface WsProcessingStatus extends WsEvent {
+  type: "processing.status";
+  /** Stage identifier */
+  stage: ProcessingStage;
+  /** Human-readable Persian label */
+  label: string;
+  /** Optional detail, e.g. tool name */
+  detail?: string;
+}
+
 export interface WsToolExecutionUpdated extends WsEvent {
   type: "tool_execution.updated";
   execution_id: string;
@@ -120,7 +146,8 @@ export interface WsConfirmationCreated extends WsEvent {
   execution_id: string;
   confirmation_id: string;
   tool: string;
-  preview: NotificationPreview;
+  action_title: string;
+  preview: GenericToolPreview;
 }
 
 export interface WsConfirmationCompleted extends WsEvent {
