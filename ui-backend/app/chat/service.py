@@ -254,22 +254,109 @@ async def handle_chat(
     # ── Tool call path ────────────────────────────────────────────────────────
     tool_call = agent_resp.tool_call
     tool_name: str = tool_call["tool"]        # type: ignore[index]
-    arguments: dict[str, Any] = tool_call["arguments"]  # type: ignore[index]
+    arguments: dict[str, Any] = tool_call.get("arguments", {})  # type: ignore[index]
+
+    # Fallback for lookup: if arguments are empty, use user message as keyword
+    if tool_name == "university_knowledge_lookup" and not arguments:
+        arguments = {"keyword": request.message, "domain": "university"}
+    elif tool_name == "university_knowledge_lookup" and not arguments.get("keyword"):
+        if request.message:
+            arguments["keyword"] = request.message
 
     # Stage 4: tool selected
     await _emit_status(session_id, conv_id_str, "tool_selected", detail=tool_name)
     logger.info("tool_selected request_id=%s tool=%s conv=%s", request_id, tool_name, conv.id)
 
-    # Create DB execution record (pending)
+    # Check if tool requires confirmation
+    tool_info = next((t for t in tools if t.get("name") == tool_name), None)
+    requires_confirm = bool(tool_info.get("requires_confirmation", False)) if tool_info else False
+
+    # Create DB execution record (pending or confirmed directly)
     execution = ToolExecution(
         conversation_id=conv.id,
         tool_name=tool_name,
         arguments=json.dumps(arguments),
-        status="pending",
+        status="pending" if requires_confirm else "confirmed",
         request_id=request_id,
     )
     db.add(execution)
     await db.flush()
+
+    # If no confirmation needed, execute directly
+    if not requires_confirm:
+        execution.confirmation_id = None
+        await db.flush()
+        await _touch_conversation(db, conv.id)
+
+        await ws_manager.send_event(
+            session_id,
+            ToolExecutionCreatedEvent(
+                conversation_id=conv_id_str,
+                execution_id=str(execution.id),
+                tool=tool_name,
+                status="confirmed",
+            ),
+        )
+        await _emit_status(session_id, conv_id_str, "executing", detail=tool_name)
+
+        # Direct execution via gateway
+        t0 = time.monotonic()
+        result = await gateway_client.call_tool(tool_name, arguments, access_token)
+        duration_ms = (time.monotonic() - t0) * 1000
+        status_code = result["status_code"]
+        body = result["body"]
+        finished_at = datetime.now(timezone.utc)
+
+        if status_code == 200 and body.get("success"):
+            await db.execute(
+                update(ToolExecution)
+                .where(ToolExecution.id == execution.id)
+                .values(
+                    status="success",
+                    result=json.dumps(body),
+                    finished_at=finished_at,
+                    duration_ms=duration_ms,
+                )
+            )
+            await db.flush()
+            await ws_manager.send_event(
+                session_id,
+                ToolExecutionUpdatedEvent(
+                    conversation_id=conv_id_str,
+                    execution_id=str(execution.id),
+                    status="success",
+                    duration_ms=duration_ms,
+                ),
+            )
+            await _emit_status(session_id, conv_id_str, "done")
+            return ToolResultResponse(success=True, message="عملیات با موفقیت انجام شد.")
+
+        # Failure path for direct execution
+        error_msg = body.get("error", {}).get("message", "عملیات ناموفق بود")
+        error_code = body.get("error", {}).get("code", "UNKNOWN_ERROR")
+        await db.execute(
+            update(ToolExecution)
+            .where(ToolExecution.id == execution.id)
+            .values(
+                status="failed",
+                error=json.dumps({"code": error_code, "message": error_msg}),
+                finished_at=finished_at,
+                duration_ms=duration_ms,
+            )
+        )
+        await db.flush()
+        await ws_manager.send_event(
+            session_id,
+            ToolExecutionUpdatedEvent(
+                conversation_id=conv_id_str,
+                execution_id=str(execution.id),
+                status="failed",
+                error=error_msg,
+                duration_ms=duration_ms,
+            ),
+        )
+        await _emit_status(session_id, conv_id_str, "error")
+        return ToolResultResponse(success=False, message=error_msg)
 
     # Create confirmation in Redis
     confirmation_id = await create_confirmation(
