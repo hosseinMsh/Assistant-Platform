@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { cancelAction, confirmAction, getConversation, sendMessage } from "@/lib/api-client";
+import { cancelAction, confirmAction, getConversation, sendMessage, transcribeAudio } from "@/lib/api-client";
 import type {
   ChatMessage,
   ConfirmationState,
@@ -240,6 +240,26 @@ export function useChat(onConversationsChanged?: () => void) {
     [loading, conversationId, addMessage, onConversationsChanged]
   );
 
+  const sendAudio = useCallback(
+    async (blob: Blob) => {
+      if (loading) return;
+      setError(null);
+      setLoading(true);
+      setIsProcessing(true);
+      try {
+        const { text } = await transcribeAudio(blob);
+        await send(text);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "خطا در تبدیل صوت";
+        setError(msg);
+        setLoading(false);
+        setIsProcessing(false);
+        setProcessingStages([]);
+      }
+    },
+    [loading, conversationId, send]
+  );
+
   // ── Confirm ───────────────────────────────────────────────────────────────────
 
   const confirm = useCallback(async () => {
@@ -333,6 +353,7 @@ export function useChat(onConversationsChanged?: () => void) {
     processingStages,
     isProcessing,
     send,
+    sendAudio,
     confirm,
     cancel,
     reset,
