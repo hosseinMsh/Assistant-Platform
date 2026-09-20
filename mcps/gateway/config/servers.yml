@@ -4,3 +4,6 @@ servers:
   notify:
     base_url: "http://mcp-notify:8080"
     description: "Notify API adapter"
+  knowledge:
+    base_url: "http://mcp-knowledge:8080"
+    description: "Sharif UTC Knowledge API adapter"
