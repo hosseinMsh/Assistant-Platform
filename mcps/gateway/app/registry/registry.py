@@ -67,6 +67,7 @@ class ServerRegistry:
                                 server=server_name,
                                 description=t.get("description", ""),
                                 input_schema=t.get("input_schema", {}),
+                                requires_confirmation=t.get("requires_confirmation", False),
                             )
                         )
                 except Exception:
