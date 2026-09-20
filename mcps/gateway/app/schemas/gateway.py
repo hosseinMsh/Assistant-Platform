@@ -19,6 +19,7 @@ class ToolInfo(BaseModel):
     server: str
     description: str
     input_schema: dict[str, Any]
+    requires_confirmation: bool = False
 
 
 class ToolListResponse(BaseModel):
