@@ -40,6 +40,9 @@ services:
     restart: unless-stopped
     networks:
       - internal
+      - external
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
@@ -86,7 +89,14 @@ services:
     env_file: mcps/notify/.env
     expose:
       - "8080"
-
+  mcp-knowledge:
+    <<: [ *mcp-defaults, *mcp-healthcheck, *logging ]
+    build:
+      context: .                          # repo root — shares mcps/shared-requirements.txt
+      dockerfile: mcps/knowledge/Dockerfile
+    env_file: mcps/knowledge/.env
+    expose:
+      - "8080"
   # ── MCP Gateway ─────────────────────────────────────────────────────────────
 
   mcp-gateway:
@@ -98,11 +108,15 @@ services:
     expose:
       - "8080"
     restart: unless-stopped
+    networks:
+      - internal
     # servers.yml mounted so you can add new servers without rebuilding the image
     volumes:
       - ./mcps/gateway/config:/app/config:ro
     depends_on:
       mcp-notify:
+        condition: service_healthy
+      mcp-knowledge:
         condition: service_healthy
     # Add new MCPs here as they are added above:
     # mcp-hr:
