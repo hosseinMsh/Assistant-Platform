@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.session import get_token
@@ -9,6 +9,7 @@ from app.chat.service import ConfirmationError, handle_cancel, handle_chat, hand
 from app.core.database import get_db
 from app.core.dependencies import require_session
 from app.core.logging import new_request_id
+from app.stt_client import transcribe_audio
 from app.schemas.chat import CancelRequest, ChatRequest, ConfirmRequest
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,21 @@ async def confirm(
     except Exception:
         logger.exception("confirm_unhandled_error")
         raise HTTPException(status_code=500, detail="خطای داخلی سرور")
+
+
+@router.post("/stt")
+async def stt(
+    file: UploadFile = File(...),
+    session_id: str = Depends(require_session),
+):
+    new_request_id()
+    try:
+        contents = await file.read()
+        text = await transcribe_audio(contents, file.filename or "audio.webm", file.content_type or "audio/webm")
+        return {"text": text}
+    except Exception as exc:
+        logger.exception("stt_error")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/chat/cancel")
