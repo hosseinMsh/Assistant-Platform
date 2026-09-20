@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o"
     llm_timeout: float = 60.0
 
+    # STT
+    stt_base_url: str = "https://api.openai.com/v1"
+    stt_api_key: str = ""
+    stt_model: str = "whisper-large-v3"
+    stt_timeout: float = 360.0
+
     # Gateway
     mcp_gateway_url: str = "http://mcp-gateway:8080"
     gateway_timeout: float = 30.0
