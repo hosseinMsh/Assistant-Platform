@@ -62,6 +62,7 @@ export function ChatWindow({
     error,
     confirmation,
     send,
+    sendAudio,
     confirm,
     cancel,
     handleWsEvent,
@@ -148,7 +149,7 @@ export function ChatWindow({
       </div>
 
       {/* Composer */}
-      <Composer onSend={send} disabled={loading || !!confirmation} />
+      <Composer onSend={send} onSendAudio={sendAudio} disabled={loading || !!confirmation} />
     </div>
   );
 }
