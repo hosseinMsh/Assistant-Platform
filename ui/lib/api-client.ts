@@ -89,6 +89,33 @@ export async function confirmAction(
   });
 }
 
+export async function transcribeAudio(
+  blob: Blob
+): Promise<{ text: string }> {
+  const formData = new FormData();
+  const mime = blob.type || "audio/webm";
+  const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "mp4" : "webm";
+  const filename = `recording.${ext}`;
+  formData.append("file", blob, filename);
+  const res = await fetch(`${BASE_URL}/api/v1/stt`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  if (!res.ok) {
+    let message = "خطا در ارتباط با سرور";
+    try {
+      const body = await res.json();
+      message =
+        body?.detail ?? body?.error?.message ?? body?.message ?? message;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, message);
+  }
+  return res.json() as Promise<{ text: string }>;
+}
+
 export async function cancelAction(confirmationId: string): Promise<void> {
   await request("/api/v1/chat/cancel", {
     method: "POST",
