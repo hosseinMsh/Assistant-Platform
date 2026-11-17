@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Private](https://img.shields.io/badge/repo-private-red)
+
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Next.js](https://img.shields.io/badge/next.js-16-black)
 ![License](https://img.shields.io/badge/license-private-lightgrey)
